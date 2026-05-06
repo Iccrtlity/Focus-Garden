@@ -10,6 +10,18 @@ function App() {
 
   const chrome = (window as any).chrome;
 
+  const notifyAndBadgeFallback = () => {
+    chrome.action.setBadgeText({ text: "\u2713" });
+    chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
+    chrome.notifications.create("focus-" + Date.now(), {
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("icon48.png"),
+      title: "Focus session complete!",
+      message: "Your garden has grown! \uD83C\uDF3F",
+      priority: 2
+    });
+  };
+
   useEffect(() => {
     // Load initial state from storage
     chrome.storage.local.get(["endTime", "isActive", "focusSessions", "customMinutes"], (res: any) => {
@@ -57,27 +69,52 @@ function App() {
         endTime: null 
       });
     });
+    chrome.runtime.sendMessage({ type: "timerComplete" }, () => {
+      if (chrome.runtime.lastError) {
+        notifyAndBadgeFallback();
+      }
+    });
   };
 
   const toggleTimer = () => {
     if (!isActive) {
       const endTime = Date.now() + timeLeft * 1000;
       chrome.storage.local.set({ isActive: true, endTime });
+      chrome.runtime.sendMessage({ type: "startTimer", endTime }, () => {
+        if (chrome.runtime.lastError) {
+          chrome.action.setBadgeText({ text: "" });
+        }
+      });
       setIsActive(true);
     } else {
       chrome.storage.local.set({ isActive: false, endTime: null });
+      chrome.runtime.sendMessage({ type: "stopTimer" }, () => {
+        if (chrome.runtime.lastError) {
+          // No background receiver available; local state is already updated.
+        }
+      });
       setIsActive(false);
     }
   };
 
   const resetTimer = () => {
     chrome.storage.local.set({ isActive: false, endTime: null });
+    chrome.runtime.sendMessage({ type: "stopTimer" }, () => {
+      if (chrome.runtime.lastError) {
+        // No background receiver available; local state is already updated.
+      }
+    });
     setIsActive(false);
     setTimeLeft(customMinutes * 60);
   };
 
   const saveSettings = () => {
     chrome.storage.local.set({ customMinutes, isActive: false, endTime: null });
+    chrome.runtime.sendMessage({ type: "stopTimer" }, () => {
+      if (chrome.runtime.lastError) {
+        // No background receiver available; local state is already updated.
+      }
+    });
     setTimeLeft(customMinutes * 60);
     setIsSettingsOpen(false);
   };
@@ -106,7 +143,7 @@ function App() {
         {isSettingsOpen ? (
           <div className="w-full space-y-4">
             <h2 className="text-center text-xs text-slate-500 uppercase tracking-widest">Minutes</h2>
-            <input type="number" value={customMinutes} onChange={(e) => setCustomMinutes(parseInt(e.target.value))} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl text-green-400 text-3xl font-mono text-center focus:outline-none focus:border-green-500" />
+            <input type="number" value={customMinutes} onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v > 0) setCustomMinutes(v); }} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl text-green-400 text-3xl font-mono text-center focus:outline-none focus:border-green-500" />
             <button onClick={saveSettings} className="w-full bg-green-500 text-slate-950 font-bold p-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-transform"><Check size={20} /> Save Settings</button>
           </div>
         ) : (
