@@ -20,4 +20,4 @@ Focus Garden is a minimalist productivity extension for Chrome that combines the
 3. Load the `dist` folder in Chrome Extensions.
 
 ---
-Built with ❤️
+Built with ❤️ 
