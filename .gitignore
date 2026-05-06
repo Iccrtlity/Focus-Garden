@@ -7,14 +7,14 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Build-Ordner (Wichtig!)
 node_modules
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# Editor-spezifische Dateien
 .vscode/*
-!.vscode/extensions.json
 .idea
 .DS_Store
 *.suo
@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# TypeScript
+*.tsbuildinfo
+
+# Umgebungsvariablen
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
