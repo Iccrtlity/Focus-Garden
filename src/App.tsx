@@ -24,6 +24,7 @@ function App() {
   const [timerMode, setTimerMode] = useState<TimerMode>("focus");
   const [totalSeconds, setTotalSeconds] = useState(25 * 60);
   const [sessionHistory, setSessionHistory] = useState<HistoryEntry[]>([]);
+  const [storageLoaded, setStorageLoaded] = useState(false);
 
   const timeLeftRef = useRef(timeLeft);
   const isActiveRef = useRef(isActive);
@@ -94,6 +95,7 @@ function App() {
           setTotalSeconds(full);
           setTimeLeft(left);
         }
+        setStorageLoaded(true);
       }
     );
 
@@ -388,7 +390,7 @@ function App() {
               const dashOffset = circumference * (1 - progress);
               const color = timerMode === "focus" ? "#22c55e" : "#0ea5e9";
               return (
-                <div className="relative mb-8" style={{ width: size, height: size }}>
+                <div className="relative mb-8" style={{ width: size, height: size, visibility: storageLoaded ? "visible" : "hidden" }}>
                   <svg width={size} height={size} className="-rotate-90" style={{ position: "absolute", top: 0, left: 0 }}>
                     {/* Track */}
                     <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#1e293b" strokeWidth={strokeWidth} />
@@ -401,7 +403,7 @@ function App() {
                       strokeLinecap="round"
                       strokeDasharray={circumference}
                       strokeDashoffset={dashOffset}
-                      style={{ transition: "stroke-dashoffset 0.5s ease" }}
+                      style={{ transition: isActive ? "stroke-dashoffset 0.5s ease" : "none" }}
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
