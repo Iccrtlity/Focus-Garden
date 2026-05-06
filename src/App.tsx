@@ -135,7 +135,8 @@ function App() {
             const nm: TimerMode = res.timerMode || "focus";
             const full = (nm === "focus" ? nf : nb) * 60;
             setTotalSeconds(full);
-            setTimeLeft(full);
+            // Use saved remaining time when paused, only reset to full on a fresh reset/complete
+            setTimeLeft(res.timeLeftSeconds ?? full);
           }
         }
       );
