@@ -9,6 +9,9 @@ Focus Garden is a minimalist productivity extension for Chrome that combines the
 - **Persistent Timer** — Timer keeps running accurately even when the popup is closed
 - **Extension Badge** — Green ✓ when focus is done, blue ✓ when break is done; clears when you open the popup
 - **Virtual Garden** — Visual progress indicator that grows with your sessions (🏜️ → 🌱 → 🌳)
+- **Session History** — Bar chart of the last 7 days with Today / This Week / All Time totals
+- **Daily Reset** — Session counter automatically resets at midnight; past days are saved to history
+- **Onboarding** — Short welcome screen on first install explaining core features
 - **Customizable Durations** — Set your own focus and break lengths via the settings panel
 - **Break Mode Toggle** — Disable automatic breaks if you want to chain focus sessions
 
