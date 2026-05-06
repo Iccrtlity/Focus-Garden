@@ -11,7 +11,7 @@ function App() {
   const chrome = (window as any).chrome;
 
   useEffect(() => {
-    // 1. Initial alles laden
+    // Load initial state from storage
     chrome.storage.local.get(["endTime", "isActive", "focusSessions", "customMinutes"], (res: any) => {
       if (res.focusSessions) setSessions(res.focusSessions);
       if (res.customMinutes) setCustomMinutes(res.customMinutes);

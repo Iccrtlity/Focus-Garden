@@ -8,7 +8,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
       if (seconds === 0) {
         if (minutes === 0) {
-          // Timer Fertig!
+          // Timer done
           chrome.alarms.clear('focusTimer');
           chrome.storage.local.set({ 
             isActive: false, 
@@ -17,8 +17,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
           chrome.notifications.create({
             type: 'basic',
             iconUrl: 'icon48.png',
-            title: 'Fokus beendet!',
-            message: 'Dein Garten ist gewachsen! 🌿',
+            title: 'Focus session complete!',
+            message: 'Your garden has grown! 🌿',
             priority: 2
           });
         } else {
