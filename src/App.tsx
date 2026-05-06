@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Play, RotateCcw, Leaf, Pause, Settings, Check } from "lucide-react";
+
+type TimerMode = "focus" | "break";
 
 function App() {
   const [timeLeft, setTimeLeft] = useState(25 * 60);
@@ -7,83 +9,144 @@ function App() {
   const [sessions, setSessions] = useState(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [customMinutes, setCustomMinutes] = useState(25);
+  const [breakMinutes, setBreakMinutes] = useState(5);
+  const [breakModeEnabled, setBreakModeEnabled] = useState(true);
+  const [timerMode, setTimerMode] = useState<TimerMode>("focus");
+
+  // Refs so the interval always sees the latest values without restarting
+  const timeLeftRef = useRef(timeLeft);
+  const isActiveRef = useRef(isActive);
+  const completingRef = useRef(false);
+  timeLeftRef.current = timeLeft;
+  isActiveRef.current = isActive;
 
   const chrome = (window as any).chrome;
 
+  // Clear badge when popup opens
   useEffect(() => {
     chrome.action.setBadgeText({ text: "" });
   }, []);
 
-  const notifyAndBadgeFallback = () => {
-    chrome.action.setBadgeText({ text: "\u2713" });
-    chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
-    chrome.notifications.create("focus-" + Date.now(), {
-      type: "basic",
-      iconUrl: chrome.runtime.getURL("icon48.png"),
-      title: "Focus session complete!",
-      message: "Your garden has grown! \uD83C\uDF3F",
-      priority: 2
-    });
-  };
-
+  // Load state from storage on popup open
   useEffect(() => {
-    // Load initial state from storage
-    chrome.storage.local.get(["endTime", "isActive", "focusSessions", "customMinutes"], (res: any) => {
-      if (res.focusSessions) setSessions(res.focusSessions);
-      if (res.customMinutes) setCustomMinutes(res.customMinutes);
-      
-      if (res.isActive && res.endTime) {
-        setIsActive(true);
-        const remaining = Math.round((res.endTime - Date.now()) / 1000);
-        if (remaining <= 0) {
-          handleTimerComplete();
+    chrome.storage.local.get(
+      ["endTime", "isActive", "focusSessions", "customMinutes", "breakMinutes", "breakModeEnabled", "timerMode", "timeLeftSeconds"],
+      (res: any) => {
+        const nextFocus = res.customMinutes || 25;
+        const nextBreak = res.breakMinutes || 5;
+        const nextMode: TimerMode = res.timerMode || "focus";
+
+        setSessions(res.focusSessions || 0);
+        setCustomMinutes(nextFocus);
+        setBreakMinutes(nextBreak);
+        setBreakModeEnabled(res.breakModeEnabled ?? true);
+        setTimerMode(nextMode);
+
+        if (res.isActive && res.endTime) {
+          const remaining = Math.max(0, Math.round((res.endTime - Date.now()) / 1000));
+          if (remaining > 0) {
+            setTimeLeft(remaining);
+            setIsActive(true);
+          } else {
+            setIsActive(false);
+            setTimeLeft((nextMode === "focus" ? nextFocus : nextBreak) * 60);
+          }
         } else {
-          setTimeLeft(remaining);
+          setIsActive(false);
+          const stored = res.timeLeftSeconds;
+          setTimeLeft(typeof stored === "number" && stored > 0 ? stored : (nextMode === "focus" ? nextFocus : nextBreak) * 60);
         }
-      } else {
-        setTimeLeft((res.customMinutes || 25) * 60);
       }
-    });
+    );
+
+    // Only listen for background-driven transitions — NOT timeLeftSeconds
+    // so the storage listener never overwrites the popup's own running countdown
+    const onStorageChanged = (changes: any, areaName: string) => {
+      if (areaName !== "local") return;
+      const activeChanged = changes.isActive;
+      const modeChanged = changes.timerMode;
+      const sessionsChanged = changes.focusSessions;
+
+      if (!activeChanged && !modeChanged && !sessionsChanged) return;
+
+      chrome.storage.local.get(
+        ["isActive", "timerMode", "endTime", "focusSessions", "customMinutes", "breakMinutes", "breakModeEnabled"],
+        (res: any) => {
+          setSessions(res.focusSessions || 0);
+          setBreakModeEnabled(res.breakModeEnabled ?? true);
+
+          // Only take over active state if we are NOT currently running in the popup
+          // (background-driven start of break timer or external stop)
+          if (!isActiveRef.current) {
+            const nextMode: TimerMode = res.timerMode || "focus";
+            setTimerMode(nextMode);
+            setCustomMinutes(res.customMinutes || 25);
+            setBreakMinutes(res.breakMinutes || 5);
+
+            if (res.isActive && res.endTime) {
+              const remaining = Math.max(0, Math.round((res.endTime - Date.now()) / 1000));
+              if (remaining > 0) {
+                setTimeLeft(remaining);
+                setIsActive(true);
+                return;
+              }
+            }
+            const nf = res.customMinutes || 25;
+            const nb = res.breakMinutes || 5;
+            const nm: TimerMode = res.timerMode || "focus";
+            setTimeLeft((nm === "focus" ? nf : nb) * 60);
+          }
+        }
+      );
+    };
+
+    chrome.storage.onChanged.addListener(onStorageChanged);
+    return () => chrome.storage.onChanged.removeListener(onStorageChanged);
   }, []);
 
+  // Stable interval — only restarts when isActive changes, uses ref to read timeLeft
   useEffect(() => {
-    let interval: any;
-    if (isActive && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            handleTimerComplete();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
+    if (!isActive) return;
+
+    const interval = setInterval(() => {
+      const current = timeLeftRef.current;
+      if (current <= 1) {
+        clearInterval(interval);
+        setTimeLeft(0);
+        if (!completingRef.current) {
+          completingRef.current = true;
+          handleTimerComplete();
+        }
+      } else {
+        setTimeLeft(current - 1);
+      }
+    }, 1000);
+
     return () => clearInterval(interval);
-  }, [isActive, timeLeft]);
+  }, [isActive]); // intentionally only isActive
 
   const handleTimerComplete = () => {
     setIsActive(false);
-    chrome.storage.local.get(["focusSessions"], (res: any) => {
-      const newSessions = (res.focusSessions || 0) + 1;
-      setSessions(newSessions);
-      chrome.storage.local.set({ 
-        focusSessions: newSessions, 
-        isActive: false, 
-        endTime: null 
-      });
-    });
     chrome.runtime.sendMessage({ type: "timerComplete" }, () => {
+      completingRef.current = false;
       if (chrome.runtime.lastError) {
-        notifyAndBadgeFallback();
+        // Background unavailable — handle locally
+        chrome.storage.local.get(["focusSessions"], (res: any) => {
+          const newSessions = (res.focusSessions || 0) + 1;
+          setSessions(newSessions);
+          chrome.storage.local.set({ isActive: false, endTime: null, focusSessions: newSessions });
+          chrome.action.setBadgeText({ text: "\u2713" });
+          chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
+        });
       }
     });
   };
 
   const toggleTimer = () => {
     if (!isActive) {
-      const endTime = Date.now() + timeLeft * 1000;
-      chrome.storage.local.set({ isActive: true, endTime });
+      const secondsToRun = timeLeft > 0 ? timeLeft : customMinutes * 60;
+      const endTime = Date.now() + secondsToRun * 1000;
+      chrome.storage.local.set({ isActive: true, endTime, timerMode, timeLeftSeconds: secondsToRun });
       chrome.runtime.sendMessage({ type: "startTimer", endTime }, () => {
         if (chrome.runtime.lastError) {
           chrome.action.setBadgeText({ text: "" });
@@ -91,34 +154,34 @@ function App() {
       });
       setIsActive(true);
     } else {
-      chrome.storage.local.set({ isActive: false, endTime: null });
-      chrome.runtime.sendMessage({ type: "stopTimer" }, () => {
-        if (chrome.runtime.lastError) {
-          // No background receiver available; local state is already updated.
-        }
-      });
+      chrome.storage.local.set({ isActive: false, endTime: null, timeLeftSeconds: timeLeftRef.current });
+      chrome.runtime.sendMessage({ type: "stopTimer" }, () => {});
       setIsActive(false);
     }
   };
 
   const resetTimer = () => {
-    chrome.storage.local.set({ isActive: false, endTime: null });
-    chrome.runtime.sendMessage({ type: "stopTimer" }, () => {
-      if (chrome.runtime.lastError) {
-        // No background receiver available; local state is already updated.
-      }
-    });
+    completingRef.current = false;
+    chrome.storage.local.set({ isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60 });
+    chrome.runtime.sendMessage({ type: "stopTimer" }, () => {});
     setIsActive(false);
+    setTimerMode("focus");
     setTimeLeft(customMinutes * 60);
   };
 
   const saveSettings = () => {
-    chrome.storage.local.set({ customMinutes, isActive: false, endTime: null });
-    chrome.runtime.sendMessage({ type: "stopTimer" }, () => {
-      if (chrome.runtime.lastError) {
-        // No background receiver available; local state is already updated.
-      }
+    completingRef.current = false;
+    chrome.storage.local.set({
+      customMinutes,
+      breakMinutes,
+      breakModeEnabled,
+      isActive: false,
+      endTime: null,
+      timerMode: "focus",
+      timeLeftSeconds: customMinutes * 60,
     });
+    chrome.runtime.sendMessage({ type: "stopTimer" }, () => {});
+    setTimerMode("focus");
     setTimeLeft(customMinutes * 60);
     setIsSettingsOpen(false);
   };
@@ -146,19 +209,34 @@ function App() {
       <div className="flex-1 flex flex-col items-center justify-center p-6">
         {isSettingsOpen ? (
           <div className="w-full space-y-4">
-            <h2 className="text-center text-xs text-slate-500 uppercase tracking-widest">Minutes</h2>
+            <h2 className="text-center text-xs text-slate-500 uppercase tracking-widest">Focus Minutes</h2>
             <input type="number" value={customMinutes} onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v > 0) setCustomMinutes(v); }} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl text-green-400 text-3xl font-mono text-center focus:outline-none focus:border-green-500" />
+            <h2 className="text-center text-xs text-slate-500 uppercase tracking-widest">Break Minutes</h2>
+            <input type="number" value={breakMinutes} onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v > 0) setBreakMinutes(v); }} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl text-sky-400 text-3xl font-mono text-center focus:outline-none focus:border-sky-500" />
+            <label className="flex items-center justify-between bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-sm uppercase tracking-widest text-slate-400">Break Mode</span>
+              <button
+                type="button"
+                onClick={() => setBreakModeEnabled((prev) => !prev)}
+                className={`w-14 h-8 rounded-full transition-colors ${breakModeEnabled ? "bg-green-500" : "bg-slate-700"}`}
+              >
+                <span className={`block w-6 h-6 rounded-full bg-white transition-transform ${breakModeEnabled ? "translate-x-7" : "translate-x-1"}`} />
+              </button>
+            </label>
             <button onClick={saveSettings} className="w-full bg-green-500 text-slate-950 font-bold p-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-transform"><Check size={20} /> Save Settings</button>
           </div>
         ) : (
           <div className="w-full flex flex-col items-center">
+            <div className={`mb-4 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-widest ${timerMode === "focus" ? "bg-green-500/20 text-green-300" : "bg-sky-500/20 text-sky-300"}`}>
+              {timerMode === "focus" ? "Focus" : "Break"}
+            </div>
             <div className="text-7xl font-mono font-light mb-10 tracking-tighter">
               {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
             </div>
-            
+
             <div className="flex items-center gap-8 mb-12">
               <button onClick={resetTimer} className="p-4 bg-slate-900 rounded-full text-slate-400 hover:text-white transition-colors"><RotateCcw size={24} /></button>
-              <button onClick={toggleTimer} className="w-24 h-24 bg-green-500 text-slate-950 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(34,197,94,0.3)] active:scale-90 transition-transform">
+              <button onClick={toggleTimer} className={`w-24 h-24 rounded-full flex items-center justify-center active:scale-90 transition-transform ${timerMode === "focus" ? "bg-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]" : "bg-sky-500 shadow-[0_0_20px_rgba(14,165,233,0.3)]"} text-slate-950`}>
                 {isActive ? <Pause size={48} fill="currentColor" /> : <Play size={48} fill="currentColor" className="ml-1" />}
               </button>
               <div className="w-12"></div>
