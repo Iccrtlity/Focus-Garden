@@ -10,6 +10,10 @@ function App() {
 
   const chrome = (window as any).chrome;
 
+  useEffect(() => {
+    chrome.action.setBadgeText({ text: "" });
+  }, []);
+
   const notifyAndBadgeFallback = () => {
     chrome.action.setBadgeText({ text: "\u2713" });
     chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
