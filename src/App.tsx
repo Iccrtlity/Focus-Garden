@@ -108,7 +108,7 @@ function App() {
 
       chrome.storage.local.get(
         ["isActive", "timerMode", "endTime", "focusSessions", "customMinutes",
-          "breakMinutes", "breakModeEnabled", "sessionHistory"],
+          "breakMinutes", "breakModeEnabled", "sessionHistory", "timeLeftSeconds"],
         (res: any) => {
           setSessions(res.focusSessions || 0);
           setBreakModeEnabled(res.breakModeEnabled ?? true);
@@ -203,7 +203,7 @@ function App() {
       setIsActive(true);
     } else {
       chrome.storage.local.set({ isActive: false, endTime: null, timeLeftSeconds: timeLeftRef.current });
-      chrome.runtime.sendMessage({ type: "stopTimer" }, () => {});
+      chrome.runtime.sendMessage({ type: "stopTimer" }, () => { void chrome.runtime.lastError; });
       setIsActive(false);
     }
   };
