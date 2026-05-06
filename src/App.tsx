@@ -22,6 +22,7 @@ function App() {
   const [breakMinutes, setBreakMinutes] = useState(5);
   const [breakModeEnabled, setBreakModeEnabled] = useState(true);
   const [timerMode, setTimerMode] = useState<TimerMode>("focus");
+  const [totalSeconds, setTotalSeconds] = useState(25 * 60);
   const [sessionHistory, setSessionHistory] = useState<HistoryEntry[]>([]);
 
   const timeLeftRef = useRef(timeLeft);
@@ -75,16 +76,23 @@ function App() {
         if (res.isActive && res.endTime) {
           const remaining = Math.max(0, Math.round((res.endTime - Date.now()) / 1000));
           if (remaining > 0) {
+            const full = (nextMode === "focus" ? nextFocus : nextBreak) * 60;
+            setTotalSeconds(full);
             setTimeLeft(remaining);
             setIsActive(true);
           } else {
+            const full = (nextMode === "focus" ? nextFocus : nextBreak) * 60;
+            setTotalSeconds(full);
             setIsActive(false);
-            setTimeLeft((nextMode === "focus" ? nextFocus : nextBreak) * 60);
+            setTimeLeft(full);
           }
         } else {
           setIsActive(false);
           const stored = res.timeLeftSeconds;
-          setTimeLeft(typeof stored === "number" && stored > 0 ? stored : (nextMode === "focus" ? nextFocus : nextBreak) * 60);
+          const full = (nextMode === "focus" ? nextFocus : nextBreak) * 60;
+          const left = typeof stored === "number" && stored > 0 ? stored : full;
+          setTotalSeconds(full);
+          setTimeLeft(left);
         }
       }
     );
@@ -115,6 +123,8 @@ function App() {
             if (res.isActive && res.endTime) {
               const remaining = Math.max(0, Math.round((res.endTime - Date.now()) / 1000));
               if (remaining > 0) {
+                const full = (nextMode === "focus" ? (res.customMinutes || 25) : (res.breakMinutes || 5)) * 60;
+                setTotalSeconds(full);
                 setTimeLeft(remaining);
                 setIsActive(true);
                 return;
@@ -123,7 +133,9 @@ function App() {
             const nf = res.customMinutes || 25;
             const nb = res.breakMinutes || 5;
             const nm: TimerMode = res.timerMode || "focus";
-            setTimeLeft((nm === "focus" ? nf : nb) * 60);
+            const full = (nm === "focus" ? nf : nb) * 60;
+            setTotalSeconds(full);
+            setTimeLeft(full);
           }
         }
       );
@@ -182,6 +194,7 @@ function App() {
     if (!isActive) {
       const secondsToRun = timeLeft > 0 ? timeLeft : customMinutes * 60;
       const endTime = Date.now() + secondsToRun * 1000;
+      if (timeLeft <= 0) setTotalSeconds(customMinutes * 60);
       chrome.storage.local.set({ isActive: true, endTime, timerMode, timeLeftSeconds: secondsToRun });
       chrome.runtime.sendMessage({ type: "startTimer", endTime }, () => {
         if (chrome.runtime.lastError) chrome.action.setBadgeText({ text: "" });
@@ -200,6 +213,7 @@ function App() {
     chrome.runtime.sendMessage({ type: "stopTimer" }, () => {});
     setIsActive(false);
     setTimerMode("focus");
+    setTotalSeconds(customMinutes * 60);
     setTimeLeft(customMinutes * 60);
   };
 
@@ -211,6 +225,7 @@ function App() {
     });
     chrome.runtime.sendMessage({ type: "stopTimer" }, () => {});
     setTimerMode("focus");
+    setTotalSeconds(customMinutes * 60);
     setTimeLeft(customMinutes * 60);
     setView("timer");
   };
@@ -358,12 +373,45 @@ function App() {
 
         {view === "timer" && (
           <div className="w-full flex flex-col items-center">
-            <div className={`mb-4 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-widest ${timerMode === "focus" ? "bg-green-500/20 text-green-300" : "bg-sky-500/20 text-sky-300"}`}>
+            <div className={`mb-6 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-widest ${timerMode === "focus" ? "bg-green-500/20 text-green-300" : "bg-sky-500/20 text-sky-300"}`}>
               {timerMode === "focus" ? "Focus" : "Break"}
             </div>
-            <div className="text-7xl font-mono font-light mb-10 tracking-tighter">
-              {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
-            </div>
+
+            {/* Circular progress ring */}
+            {(() => {
+              const size = 200;
+              const strokeWidth = 8;
+              const radius = (size - strokeWidth) / 2;
+              const circumference = 2 * Math.PI * radius;
+              const progress = totalSeconds > 0 ? timeLeft / totalSeconds : 1;
+              const dashOffset = circumference * (1 - progress);
+              const color = timerMode === "focus" ? "#22c55e" : "#0ea5e9";
+              return (
+                <div className="relative mb-8" style={{ width: size, height: size }}>
+                  <svg width={size} height={size} className="-rotate-90" style={{ position: "absolute", top: 0, left: 0 }}>
+                    {/* Track */}
+                    <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#1e293b" strokeWidth={strokeWidth} />
+                    {/* Progress */}
+                    <circle
+                      cx={size / 2} cy={size / 2} r={radius}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth={strokeWidth}
+                      strokeLinecap="round"
+                      strokeDasharray={circumference}
+                      strokeDashoffset={dashOffset}
+                      style={{ transition: "stroke-dashoffset 0.5s ease" }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-5xl font-mono font-light tracking-tighter">
+                      {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="flex items-center gap-8 mb-12">
               <button onClick={resetTimer} className="p-4 bg-slate-900 rounded-full text-slate-400 hover:text-white transition-colors"><RotateCcw size={24} /></button>
               <button onClick={toggleTimer} className={`w-24 h-24 rounded-full flex items-center justify-center active:scale-90 transition-transform ${timerMode === "focus" ? "bg-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]" : "bg-sky-500 shadow-[0_0_20px_rgba(14,165,233,0.3)]"} text-slate-950`}>
