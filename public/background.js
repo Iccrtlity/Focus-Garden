@@ -1,5 +1,7 @@
 const TIMER_ALARM = "focusTimer";
 
+chrome.runtime.setUninstallURL('https://focus-garden.spacekeep.dev/uninstall');
+
 function getToday() {
   return new Date().toISOString().slice(0, 10);
 }
