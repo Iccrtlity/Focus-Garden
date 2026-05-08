@@ -213,7 +213,7 @@ function App() {
   const resetTimer = () => {
     completingRef.current = false;
     chrome.storage.local.set({ isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60 });
-    chrome.runtime.sendMessage({ type: "stopTimer" }, () => {});
+    chrome.runtime.sendMessage({ type: "stopTimer" }, () => { void chrome.runtime.lastError; });
     setIsActive(false);
     setTimerMode("focus");
     setTotalSeconds(customMinutes * 60);
@@ -226,7 +226,8 @@ function App() {
       customMinutes, breakMinutes, breakModeEnabled,
       isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60,
     });
-    chrome.runtime.sendMessage({ type: "stopTimer" }, () => {});
+    chrome.runtime.sendMessage({ type: "stopTimer" }, () => { void chrome.runtime.lastError; });
+    setIsActive(false);
     setTimerMode("focus");
     setTotalSeconds(customMinutes * 60);
     setTimeLeft(customMinutes * 60);
