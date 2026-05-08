@@ -8,10 +8,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "focus-garden@spacekeep.dev",
-      "strict_min_version": "140.0",
-      "data_collection_permissions": {
-        "required": []
-      }
+      "strict_min_version": "140.0"
     }
   },
   "action": {
