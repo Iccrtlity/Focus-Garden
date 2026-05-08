@@ -173,7 +173,19 @@ function App() {
     chrome.runtime.sendMessage({ type: "timerComplete" }, () => {
       completingRef.current = false;
       if (chrome.runtime.lastError) {
-        chrome.storage.local.get(["focusSessions", "sessionHistory", "lastSessionDate"], (res: any) => {
+        // Fallback when service worker is unreachable
+        chrome.storage.local.get(["focusSessions", "sessionHistory", "lastSessionDate", "timerMode", "customMinutes"], (res: any) => {
+          const mode: TimerMode = res.timerMode || "focus";
+          if (mode === "break") {
+            const full = (res.customMinutes || 25) * 60;
+            setTimerMode("focus");
+            setTimeLeft(full);
+            setTotalSeconds(full);
+            chrome.storage.local.set({ isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: full });
+            chrome.action.setBadgeText({ text: "\u2713" });
+            chrome.action.setBadgeBackgroundColor({ color: "#0ea5e9" });
+            return;
+          }
           const today = getToday();
           const lastDate = res.lastSessionDate || today;
           let currentSessions = res.focusSessions || 0;

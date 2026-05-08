@@ -116,7 +116,9 @@ function completeSessionIfActive() {
         isActive: false,
         endTime: null,
         timerMode: "focus",
-        timeLeftSeconds: (res.customMinutes || 25) * 60
+        timeLeftSeconds: (res.customMinutes || 25) * 60,
+        lastSessionDate: getToday(),
+        sessionHistory: res.sessionHistory || []
       });
       showBreakDoneBadge();
     }
