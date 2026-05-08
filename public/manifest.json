@@ -3,8 +3,14 @@
   "name": "Focus Garden",
   "version": "1.2",
   "description": "A Pomodoro timer that grows a virtual garden as you focus. Stay productive and watch your garden flourish, one session at a time.",
-  "homepage_url": "https://github.com/Iccrtlity/Focus-Garden",
+  "homepage_url": "https://github.com/SpaceKeep/Focus-Garden",
   "minimum_chrome_version": "109",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "focus-garden@spacekeep.dev",
+      "strict_min_version": "128.0"
+    }
+  },
   "action": {
     "default_popup": "index.html",
     "default_icon": {

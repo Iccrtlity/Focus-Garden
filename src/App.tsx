@@ -32,7 +32,7 @@ function App() {
   timeLeftRef.current = timeLeft;
   isActiveRef.current = isActive;
 
-  const chrome = (window as any).chrome;
+  const chrome = (window as any).chrome ?? (window as any).browser;
 
   useEffect(() => {
     chrome.action.setBadgeText({ text: "" });
