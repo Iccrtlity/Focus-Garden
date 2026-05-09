@@ -12,6 +12,7 @@ Focus Garden is a minimalist productivity extension for Chrome that combines the
 - **Virtual Garden** — Visual progress indicator that grows from seedling to sprout to tree as total sessions increase
 - **Plant Customization** — Name your plant and choose a plant style from the settings panel
 - **Session History** — Bar chart of the last 7 days with Today / This Week / All Time totals
+- **Milestones & Achievements** — Optional cosmetic rewards for progress like 10 total sessions, a 7-day streak, or 4 sessions in one day
 - **Daily Reset** — Session counter automatically resets at midnight; past days are saved to history
 - **Onboarding** — Short welcome screen on first install explaining core features
 - **Customizable Durations** — Set your own focus and break lengths via the settings panel

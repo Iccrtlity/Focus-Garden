@@ -1,5 +1,21 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Play, RotateCcw, Leaf, Pause, Settings, Check, BarChart2, Sprout, Shrub, Flower2 } from "lucide-react";
+import {
+  Play,
+  RotateCcw,
+  Leaf,
+  Pause,
+  Settings,
+  Check,
+  BarChart2,
+  Sprout,
+  Shrub,
+  Flower2,
+  Trophy,
+  Flame,
+  BadgeCheck,
+  Palette,
+  Lock,
+} from "lucide-react";
 
 type TimerMode = "focus" | "break";
 type View = "timer" | "settings" | "history" | "onboarding";
@@ -8,6 +24,16 @@ type PlantSpecies = "herb" | "succulent" | "flower";
 interface HistoryEntry {
   date: string;
   count: number;
+}
+
+interface Achievement {
+  id: string;
+  title: string;
+  reward: string;
+  progress: number;
+  goal: number;
+  unlocked: boolean;
+  icon: "trophy" | "flame" | "badge";
 }
 
 interface StorageValues {
@@ -102,6 +128,14 @@ function PlantSpeciesIcon({ species }: { species: PlantSpecies }) {
   if (species === "succulent") return <Shrub size={16} />;
   if (species === "flower") return <Flower2 size={16} />;
   return <Sprout size={16} />;
+}
+
+function AchievementIcon({ achievement }: { achievement: Achievement }) {
+  const iconClass = achievement.unlocked ? "text-slate-950" : "text-slate-500";
+  if (!achievement.unlocked) return <Lock size={16} className={iconClass} />;
+  if (achievement.icon === "flame") return <Flame size={16} className={iconClass} />;
+  if (achievement.icon === "badge") return <BadgeCheck size={16} className={iconClass} />;
+  return <Trophy size={16} className={iconClass} />;
 }
 
 function updatePlantDisplay(totalSessions: number, species: PlantSpecies, extensionApi?: ExtensionApi): void {
@@ -448,6 +482,50 @@ function App() {
   const maxCount = Math.max(...last7Days.map((d) => d.count), 1);
   const weekTotal = last7Days.reduce((s, d) => s + d.count, 0);
   const allTimeTotal = sessionHistory.reduce((s, d) => s + d.count, 0) + sessions;
+  const dailyCounts = new Map(sessionHistory.map((entry) => [entry.date, entry.count]));
+  dailyCounts.set(getToday(), sessions);
+  const streakDays = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (29 - i));
+    return dailyCounts.get(formatLocalDate(d)) || 0;
+  });
+  const longestStreak = streakDays.reduce(
+    (acc, count) => {
+      const current = count > 0 ? acc.current + 1 : 0;
+      return { current, longest: Math.max(acc.longest, current) };
+    },
+    { current: 0, longest: 0 }
+  ).longest;
+  const bestDayCount = Math.max(...Array.from(dailyCounts.values()), sessions, 0);
+  const achievements: Achievement[] = [
+    {
+      id: "first-10",
+      title: "First 10 Sessions",
+      reward: "Badge unlock",
+      progress: Math.min(totalFocusSessions, 10),
+      goal: 10,
+      unlocked: totalFocusSessions >= 10,
+      icon: "trophy",
+    },
+    {
+      id: "seven-day-streak",
+      title: "7-Day Streak",
+      reward: "Pot style unlock",
+      progress: Math.min(longestStreak, 7),
+      goal: 7,
+      unlocked: longestStreak >= 7,
+      icon: "flame",
+    },
+    {
+      id: "four-session-day",
+      title: "4 Sessions In One Day",
+      reward: "Plant skin unlock",
+      progress: Math.min(bestDayCount, 4),
+      goal: 4,
+      unlocked: bestDayCount >= 4,
+      icon: "badge",
+    },
+  ];
 
   return (
     <div className="w-[350px] min-h-[500px] bg-slate-950 text-slate-100 flex flex-col font-sans overflow-hidden">
@@ -535,7 +613,7 @@ function App() {
         )}
 
         {view === "history" && (
-          <div className="w-full">
+          <div className="w-full max-h-[410px] overflow-y-auto pr-1">
             <h2 className="text-center text-xs text-slate-500 uppercase tracking-widest mb-6">Last 7 Days</h2>
             <div className="flex items-end justify-between gap-2 mb-3" style={{ height: "120px" }}>
               {last7Days.map((day) => (
@@ -571,6 +649,30 @@ function App() {
               <div>
                 <p className="text-2xl font-bold text-slate-300">{allTimeTotal}</p>
                 <p className="text-xs text-slate-500 mt-1">All Time</p>
+              </div>
+            </div>
+            <div className="mt-5">
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500 uppercase tracking-widest mb-3">
+                <Palette size={14} />
+                Milestones
+              </div>
+              <div className="space-y-2">
+                {achievements.map((achievement) => (
+                  <div key={achievement.id} className={`border rounded-xl p-3 flex items-center gap-3 ${achievement.unlocked ? "bg-green-500/15 border-green-500/30" : "bg-slate-900/70 border-slate-800"}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${achievement.unlocked ? "bg-green-500" : "bg-slate-800"}`}>
+                      <AchievementIcon achievement={achievement} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-white truncate">{achievement.title}</p>
+                        <span className={`text-[10px] uppercase tracking-widest ${achievement.unlocked ? "text-green-300" : "text-slate-500"}`}>
+                          {achievement.unlocked ? "Unlocked" : `${achievement.progress}/${achievement.goal}`}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">{achievement.reward}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
