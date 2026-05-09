@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Play, RotateCcw, Leaf, Pause, Settings, Check, BarChart2 } from "lucide-react";
 
 type TimerMode = "focus" | "break";
@@ -10,30 +10,95 @@ interface HistoryEntry {
   count: number;
 }
 
-function getToday(): string {
-  return new Date().toISOString().slice(0, 10);
+interface StorageValues {
+  endTime?: number | null;
+  isActive?: boolean;
+  focusSessions?: number;
+  totalFocusSessions?: number;
+  customMinutes?: number;
+  breakMinutes?: number;
+  breakModeEnabled?: boolean;
+  timerMode?: TimerMode;
+  timeLeftSeconds?: number;
+  sessionHistory?: HistoryEntry[];
+  lastSessionDate?: string;
+  onboardingDone?: boolean;
+  plantName?: string;
+  plantSpecies?: string;
 }
 
-function getPlantImagePath(totalSessions: number, species: PlantSpecies = "herb", chromeApi?: any): string {
-  let imageName = "seedling.png";
+interface StorageChange {
+  newValue?: unknown;
+  oldValue?: unknown;
+}
 
+interface ExtensionApi {
+  action?: {
+    setBadgeText: (details: { text: string }) => void;
+    setBadgeBackgroundColor: (details: { color: string }) => void;
+  };
+  runtime?: {
+    getURL: (path: string) => string;
+    lastError?: unknown;
+    sendMessage: (message: unknown, callback?: () => void) => void;
+  };
+  storage?: {
+    local: {
+      get: (keys: string[], callback: (items: StorageValues) => void) => void;
+      set: (items: StorageValues) => void;
+    };
+    onChanged: {
+      addListener: (callback: (changes: Record<string, StorageChange>, areaName: string) => void) => void;
+      removeListener: (callback: (changes: Record<string, StorageChange>, areaName: string) => void) => void;
+    };
+  };
+}
+
+interface ExtensionWindow extends Window {
+  chrome?: ExtensionApi;
+  browser?: ExtensionApi;
+}
+
+function getExtensionApi(): ExtensionApi | undefined {
+  const extensionWindow = window as ExtensionWindow;
+  return extensionWindow.chrome ?? extensionWindow.browser;
+}
+
+function getToday(): string {
+  return formatLocalDate(new Date());
+}
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getStoredPlantSpecies(value: string | undefined): PlantSpecies {
+  if (value === "succulent" || value === "flower") return value;
+  return "herb";
+}
+
+function getPlantImagePath(totalSessions: number, extensionApi?: ExtensionApi): string {
+  let imageName: string;
   if (totalSessions >= 10) {
-    imageName = `tree-${species}.png`;
+    imageName = "tree.png";
   } else if (totalSessions >= 5) {
-    imageName = `sprout-${species}.png`;
+    imageName = "sprout.png";
   } else {
-    imageName = `seedling-${species}.png`;
+    imageName = "seedling.png";
   }
 
-  return chromeApi?.runtime?.getURL?.(imageName) ?? `./${imageName}`;
+  return extensionApi?.runtime?.getURL(imageName) ?? `./${imageName}`;
 }
 
-function updatePlantDisplay(totalSessions: number, species: PlantSpecies = "herb", chromeApi?: any): void {
+function updatePlantDisplay(totalSessions: number, species: PlantSpecies, extensionApi?: ExtensionApi): void {
   const plantDisplay = document.getElementById("plant-display") as HTMLImageElement | null;
   if (!plantDisplay) return;
 
-  plantDisplay.src = getPlantImagePath(totalSessions, species, chromeApi);
-  plantDisplay.alt = `Plant growth level for ${totalSessions} completed sessions`;
+  plantDisplay.src = getPlantImagePath(totalSessions, extensionApi);
+  plantDisplay.alt = `${species} plant growth level for ${totalSessions} completed sessions`;
 }
 
 function App() {
@@ -48,32 +113,42 @@ function App() {
   const [timerMode, setTimerMode] = useState<TimerMode>("focus");
   const [totalSeconds, setTotalSeconds] = useState(25 * 60);
   const [sessionHistory, setSessionHistory] = useState<HistoryEntry[]>([]);
-  const [storageLoaded, setStorageLoaded] = useState(false);
+  const [storageLoaded, setStorageLoaded] = useState(() => !getExtensionApi()?.storage);
   const [plantName, setPlantName] = useState("My Plant");
   const [plantSpecies, setPlantSpecies] = useState<PlantSpecies>("herb");
 
   const timeLeftRef = useRef(timeLeft);
   const isActiveRef = useRef(isActive);
   const completingRef = useRef(false);
-  timeLeftRef.current = timeLeft;
-  isActiveRef.current = isActive;
 
-  const chrome = (window as any).chrome ?? (window as any).browser;
+  const extensionApi = useMemo(() => getExtensionApi(), []);
 
   useEffect(() => {
-    chrome.action.setBadgeText({ text: "" });
-  }, []);
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
 
   useEffect(() => {
-    updatePlantDisplay(totalFocusSessions, plantSpecies, chrome);
-  }, [chrome, totalFocusSessions, plantSpecies]);
+    isActiveRef.current = isActive;
+  }, [isActive]);
 
   useEffect(() => {
-    chrome.storage.local.get(
+    extensionApi?.action?.setBadgeText({ text: "" });
+  }, [extensionApi]);
+
+  useEffect(() => {
+    updatePlantDisplay(totalFocusSessions, plantSpecies, extensionApi);
+  }, [extensionApi, totalFocusSessions, plantSpecies]);
+
+  useEffect(() => {
+    if (!extensionApi?.storage) {
+      return;
+    }
+
+    extensionApi.storage.local.get(
       ["endTime", "isActive", "focusSessions", "totalFocusSessions", "customMinutes", "breakMinutes",
         "breakModeEnabled", "timerMode", "timeLeftSeconds", "sessionHistory",
         "lastSessionDate", "onboardingDone", "plantName", "plantSpecies"],
-      (res: any) => {
+      (res) => {
         // Daily reset
         const today = getToday();
         const lastDate = res.lastSessionDate || today;
@@ -83,16 +158,16 @@ function App() {
         if (lastDate !== today && currentSessions > 0) {
           history = [...history, { date: lastDate, count: currentSessions }].slice(-30);
           currentSessions = 0;
-          chrome.storage.local.set({ focusSessions: 0, lastSessionDate: today, sessionHistory: history });
+          extensionApi.storage?.local.set({ focusSessions: 0, lastSessionDate: today, sessionHistory: history });
         } else if (!res.lastSessionDate) {
-          chrome.storage.local.set({ lastSessionDate: today });
+          extensionApi.storage?.local.set({ lastSessionDate: today });
         }
 
         setSessions(currentSessions);
-  setTotalFocusSessions(res.totalFocusSessions || 0);
+        setTotalFocusSessions(res.totalFocusSessions || 0);
         setSessionHistory(history);
         setPlantName(res.plantName || "My Plant");
-        setPlantSpecies(res.plantSpecies || "herb");
+        setPlantSpecies(getStoredPlantSpecies(res.plantSpecies));
 
         const nextFocus = res.customMinutes || 25;
         const nextBreak = res.breakMinutes || 5;
@@ -132,7 +207,7 @@ function App() {
       }
     );
 
-    const onStorageChanged = (changes: any, areaName: string) => {
+    const onStorageChanged = (changes: Record<string, StorageChange>, areaName: string) => {
       if (areaName !== "local") return;
       const activeChanged = changes.isActive;
       const modeChanged = changes.timerMode;
@@ -142,10 +217,10 @@ function App() {
 
       if (!activeChanged && !modeChanged && !sessionsChanged && !totalSessionsChanged && !historyChanged) return;
 
-      chrome.storage.local.get(
+      extensionApi.storage?.local.get(
         ["isActive", "timerMode", "endTime", "focusSessions", "totalFocusSessions", "customMinutes",
           "breakMinutes", "breakModeEnabled", "sessionHistory", "timeLeftSeconds"],
-        (res: any) => {
+        (res) => {
           setSessions(res.focusSessions || 0);
           setTotalFocusSessions(res.totalFocusSessions || 0);
           setBreakModeEnabled(res.breakModeEnabled ?? true);
@@ -179,9 +254,66 @@ function App() {
       );
     };
 
-    chrome.storage.onChanged.addListener(onStorageChanged);
-    return () => chrome.storage.onChanged.removeListener(onStorageChanged);
-  }, []);
+    extensionApi.storage.onChanged.addListener(onStorageChanged);
+    return () => extensionApi.storage?.onChanged.removeListener(onStorageChanged);
+  }, [extensionApi]);
+
+  const handleTimerComplete = useCallback(() => {
+    setIsActive(false);
+
+    if (!extensionApi?.runtime || !extensionApi.storage) {
+      completingRef.current = false;
+      return;
+    }
+
+    extensionApi.runtime.sendMessage({ type: "timerComplete" }, () => {
+      completingRef.current = false;
+      if (extensionApi.runtime?.lastError) {
+        // Fallback when service worker is unreachable
+        extensionApi.storage?.local.get(
+          ["focusSessions", "totalFocusSessions", "sessionHistory", "lastSessionDate", "timerMode", "customMinutes", "plantName", "plantSpecies"],
+          (res) => {
+            const mode: TimerMode = res.timerMode || "focus";
+            if (mode === "break") {
+              const full = (res.customMinutes || 25) * 60;
+              setTimerMode("focus");
+              setTimeLeft(full);
+              setTotalSeconds(full);
+              extensionApi.storage?.local.set({ isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: full });
+              extensionApi.action?.setBadgeText({ text: "\u2713" });
+              extensionApi.action?.setBadgeBackgroundColor({ color: "#0ea5e9" });
+              return;
+            }
+            const today = getToday();
+            const lastDate = res.lastSessionDate || today;
+            let currentSessions = res.focusSessions || 0;
+            const newTotalSessions = (res.totalFocusSessions || 0) + 1;
+            let history: HistoryEntry[] = res.sessionHistory || [];
+            if (lastDate !== today && currentSessions > 0) {
+              history = [...history, { date: lastDate, count: currentSessions }].slice(-30);
+              currentSessions = 0;
+            }
+            const newSessions = currentSessions + 1;
+            setSessions(newSessions);
+            setTotalFocusSessions(newTotalSessions);
+            setSessionHistory(history);
+            setPlantName(res.plantName || "My Plant");
+            setPlantSpecies(getStoredPlantSpecies(res.plantSpecies));
+            extensionApi.storage?.local.set({
+              isActive: false,
+              endTime: null,
+              focusSessions: newSessions,
+              totalFocusSessions: newTotalSessions,
+              lastSessionDate: today,
+              sessionHistory: history,
+            });
+            extensionApi.action?.setBadgeText({ text: "\u2713" });
+            extensionApi.action?.setBadgeBackgroundColor({ color: "#22c55e" });
+          }
+        );
+      }
+    });
+  }, [extensionApi]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -201,70 +333,29 @@ function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isActive]);
-
-  const handleTimerComplete = () => {
-    setIsActive(false);
-    chrome.runtime.sendMessage({ type: "timerComplete" }, () => {
-      completingRef.current = false;
-      if (chrome.runtime.lastError) {
-        // Fallback when service worker is unreachable
-        chrome.storage.local.get(["focusSessions", "totalFocusSessions", "sessionHistory", "lastSessionDate", "timerMode", "customMinutes"], (res: any) => {
-          const mode: TimerMode = res.timerMode || "focus";
-          if (mode === "break") {
-            const full = (res.customMinutes || 25) * 60;
-            setTimerMode("focus");
-            setTimeLeft(full);
-            setTotalSeconds(full);
-            chrome.storage.local.set({ isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: full });
-            chrome.action.setBadgeText({ text: "\u2713" });
-            chrome.action.setBadgeBackgroundColor({ color: "#0ea5e9" });
-            return;
-          }
-          const today = getToday();
-          const lastDate = res.lastSessionDate || today;
-          let currentSessions = res.focusSessions || 0;
-          const newTotalSessions = (res.totalFocusSessions || 0) + 1;
-          let history: HistoryEntry[] = res.sessionHistory || [];
-          if (lastDate !== today && currentSessions > 0) {
-            history = [...history, { date: lastDate, count: currentSessions }].slice(-30);
-            currentSessions = 0;
-          }
-          const newSessions = currentSessions + 1;
-          setSessions(newSessions);
-          setTotalFocusSessions(newTotalSessions);
-          setSessionHistory(history);
-        setPlantName(res.plantName || "My Plant");
-        setPlantSpecies(res.plantSpecies || "herb");
-          chrome.storage.local.set({ isActive: false, endTime: null, focusSessions: newSessions, totalFocusSessions: newTotalSessions, lastSessionDate: today, sessionHistory: history });
-          chrome.action.setBadgeText({ text: "\u2713" });
-          chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
-        });
-      }
-    });
-  };
+  }, [handleTimerComplete, isActive]);
 
   const toggleTimer = () => {
     if (!isActive) {
       const secondsToRun = timeLeft > 0 ? timeLeft : customMinutes * 60;
       const endTime = Date.now() + secondsToRun * 1000;
       if (timeLeft <= 0) setTotalSeconds(customMinutes * 60);
-      chrome.storage.local.set({ isActive: true, endTime, timerMode, timeLeftSeconds: secondsToRun });
-      chrome.runtime.sendMessage({ type: "startTimer", endTime }, () => {
-        if (chrome.runtime.lastError) chrome.action.setBadgeText({ text: "" });
+      extensionApi?.storage?.local.set({ isActive: true, endTime, timerMode, timeLeftSeconds: secondsToRun });
+      extensionApi?.runtime?.sendMessage({ type: "startTimer", endTime }, () => {
+        if (extensionApi.runtime?.lastError) extensionApi.action?.setBadgeText({ text: "" });
       });
       setIsActive(true);
     } else {
-      chrome.storage.local.set({ isActive: false, endTime: null, timeLeftSeconds: timeLeftRef.current });
-      chrome.runtime.sendMessage({ type: "stopTimer" }, () => { void chrome.runtime.lastError; });
+      extensionApi?.storage?.local.set({ isActive: false, endTime: null, timeLeftSeconds: timeLeftRef.current });
+      extensionApi?.runtime?.sendMessage({ type: "stopTimer" }, () => { void extensionApi.runtime?.lastError; });
       setIsActive(false);
     }
   };
 
   const resetTimer = () => {
     completingRef.current = false;
-    chrome.storage.local.set({ isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60 });
-    chrome.runtime.sendMessage({ type: "stopTimer" }, () => { void chrome.runtime.lastError; });
+    extensionApi?.storage?.local.set({ isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60 });
+    extensionApi?.runtime?.sendMessage({ type: "stopTimer" }, () => { void extensionApi.runtime?.lastError; });
     setIsActive(false);
     setTimerMode("focus");
     setTotalSeconds(customMinutes * 60);
@@ -273,11 +364,11 @@ function App() {
 
   const saveSettings = () => {
     completingRef.current = false;
-    chrome.storage.local.set({
+    extensionApi?.storage?.local.set({
       customMinutes, breakMinutes, breakModeEnabled, plantName, plantSpecies,
       isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60,
     });
-    chrome.runtime.sendMessage({ type: "stopTimer" }, () => { void chrome.runtime.lastError; });
+    extensionApi?.runtime?.sendMessage({ type: "stopTimer" }, () => { void extensionApi.runtime?.lastError; });
     setIsActive(false);
     setTimerMode("focus");
     setTotalSeconds(customMinutes * 60);
@@ -286,7 +377,7 @@ function App() {
   };
 
   const completeOnboarding = () => {
-    chrome.storage.local.set({ onboardingDone: true });
+    extensionApi?.storage?.local.set({ onboardingDone: true });
     setView("timer");
   };
 
@@ -297,7 +388,7 @@ function App() {
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = formatLocalDate(d);
     const entry = sessionHistory.find((h) => h.date === dateStr);
     const isToday = dateStr === getToday();
     return {
@@ -484,8 +575,8 @@ function App() {
             <div className="w-full bg-slate-900/50 border border-slate-800 rounded-[2rem] p-6 text-center relative">
               <img
                 id="plant-display"
-                src={getPlantImagePath(totalFocusSessions, plantSpecies, chrome)}
-                alt={`Plant growth level for ${totalFocusSessions} completed sessions`}
+                src={getPlantImagePath(totalFocusSessions, extensionApi)}
+                alt={`${plantSpecies} plant growth level for ${totalFocusSessions} completed sessions`}
                 className="mx-auto mb-3 h-24 w-24 object-contain drop-shadow-md"
               />
               <p className="text-green-400 font-semibold">{plantName}</p>
