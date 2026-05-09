@@ -13,10 +13,31 @@ function getToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function getPlantImagePath(totalSessions: number, chromeApi?: any): string {
+  let imageName = "seedling.png";
+
+  if (totalSessions >= 10) {
+    imageName = "tree.png";
+  } else if (totalSessions >= 5) {
+    imageName = "sprout.png";
+  }
+
+  return chromeApi?.runtime?.getURL?.(imageName) ?? `./${imageName}`;
+}
+
+function updatePlantDisplay(totalSessions: number, chromeApi?: any): void {
+  const plantDisplay = document.getElementById("plant-display") as HTMLImageElement | null;
+  if (!plantDisplay) return;
+
+  plantDisplay.src = getPlantImagePath(totalSessions, chromeApi);
+  plantDisplay.alt = `Plant growth level for ${totalSessions} completed sessions`;
+}
+
 function App() {
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isActive, setIsActive] = useState(false);
   const [sessions, setSessions] = useState(0);
+  const [totalFocusSessions, setTotalFocusSessions] = useState(0);
   const [view, setView] = useState<View>("timer");
   const [customMinutes, setCustomMinutes] = useState(25);
   const [breakMinutes, setBreakMinutes] = useState(5);
@@ -39,8 +60,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    updatePlantDisplay(totalFocusSessions, chrome);
+  }, [chrome, totalFocusSessions]);
+
+  useEffect(() => {
     chrome.storage.local.get(
-      ["endTime", "isActive", "focusSessions", "customMinutes", "breakMinutes",
+      ["endTime", "isActive", "focusSessions", "totalFocusSessions", "customMinutes", "breakMinutes",
         "breakModeEnabled", "timerMode", "timeLeftSeconds", "sessionHistory",
         "lastSessionDate", "onboardingDone"],
       (res: any) => {
@@ -59,6 +84,7 @@ function App() {
         }
 
         setSessions(currentSessions);
+  setTotalFocusSessions(res.totalFocusSessions || 0);
         setSessionHistory(history);
 
         const nextFocus = res.customMinutes || 25;
@@ -104,15 +130,17 @@ function App() {
       const activeChanged = changes.isActive;
       const modeChanged = changes.timerMode;
       const sessionsChanged = changes.focusSessions;
+      const totalSessionsChanged = changes.totalFocusSessions;
       const historyChanged = changes.sessionHistory;
 
-      if (!activeChanged && !modeChanged && !sessionsChanged && !historyChanged) return;
+      if (!activeChanged && !modeChanged && !sessionsChanged && !totalSessionsChanged && !historyChanged) return;
 
       chrome.storage.local.get(
-        ["isActive", "timerMode", "endTime", "focusSessions", "customMinutes",
+        ["isActive", "timerMode", "endTime", "focusSessions", "totalFocusSessions", "customMinutes",
           "breakMinutes", "breakModeEnabled", "sessionHistory", "timeLeftSeconds"],
         (res: any) => {
           setSessions(res.focusSessions || 0);
+          setTotalFocusSessions(res.totalFocusSessions || 0);
           setBreakModeEnabled(res.breakModeEnabled ?? true);
           if (res.sessionHistory) setSessionHistory(res.sessionHistory);
 
@@ -174,7 +202,7 @@ function App() {
       completingRef.current = false;
       if (chrome.runtime.lastError) {
         // Fallback when service worker is unreachable
-        chrome.storage.local.get(["focusSessions", "sessionHistory", "lastSessionDate", "timerMode", "customMinutes"], (res: any) => {
+        chrome.storage.local.get(["focusSessions", "totalFocusSessions", "sessionHistory", "lastSessionDate", "timerMode", "customMinutes"], (res: any) => {
           const mode: TimerMode = res.timerMode || "focus";
           if (mode === "break") {
             const full = (res.customMinutes || 25) * 60;
@@ -189,6 +217,7 @@ function App() {
           const today = getToday();
           const lastDate = res.lastSessionDate || today;
           let currentSessions = res.focusSessions || 0;
+          const newTotalSessions = (res.totalFocusSessions || 0) + 1;
           let history: HistoryEntry[] = res.sessionHistory || [];
           if (lastDate !== today && currentSessions > 0) {
             history = [...history, { date: lastDate, count: currentSessions }].slice(-30);
@@ -196,8 +225,9 @@ function App() {
           }
           const newSessions = currentSessions + 1;
           setSessions(newSessions);
+          setTotalFocusSessions(newTotalSessions);
           setSessionHistory(history);
-          chrome.storage.local.set({ isActive: false, endTime: null, focusSessions: newSessions, lastSessionDate: today, sessionHistory: history });
+          chrome.storage.local.set({ isActive: false, endTime: null, focusSessions: newSessions, totalFocusSessions: newTotalSessions, lastSessionDate: today, sessionHistory: history });
           chrome.action.setBadgeText({ text: "\u2713" });
           chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
         });
@@ -436,8 +466,14 @@ function App() {
               <div className="w-12"></div>
             </div>
             <div className="w-full bg-slate-900/50 border border-slate-800 rounded-[2rem] p-6 text-center">
-              <div className="text-6xl mb-2 drop-shadow-md">{sessions === 0 ? "🏜️" : sessions < 3 ? "🌱" : "🌳"}</div>
+              <img
+                id="plant-display"
+                src={getPlantImagePath(totalFocusSessions, chrome)}
+                alt={`Plant growth level for ${totalFocusSessions} completed sessions`}
+                className="mx-auto mb-3 h-24 w-24 object-contain drop-shadow-md"
+              />
               <p className="text-white font-medium">{sessions} Sessions today</p>
+              <p className="mt-1 text-xs text-slate-400">{totalFocusSessions} total completed sessions</p>
             </div>
           </div>
         )}

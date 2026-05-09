@@ -59,7 +59,7 @@ function recoverAlarmFromStorage() {
 
 function completeSessionIfActive() {
   chrome.storage.local.get(
-    ["isActive", "focusSessions", "timerMode", "breakModeEnabled", "breakMinutes", "customMinutes", "lastSessionDate", "sessionHistory"],
+    ["isActive", "focusSessions", "totalFocusSessions", "timerMode", "breakModeEnabled", "breakMinutes", "customMinutes", "lastSessionDate", "sessionHistory"],
     (res) => {
       if (!res.isActive) return;
 
@@ -78,6 +78,7 @@ function completeSessionIfActive() {
         }
 
         const newSessions = currentSessions + 1;
+  const newTotalSessions = (res.totalFocusSessions || 0) + 1;
         const breakModeEnabled = res.breakModeEnabled ?? true;
 
         if (breakModeEnabled) {
@@ -89,6 +90,7 @@ function completeSessionIfActive() {
             endTime,
             timerMode: "break",
             focusSessions: newSessions,
+            totalFocusSessions: newTotalSessions,
             timeLeftSeconds: breakMinutes * 60,
             lastSessionDate: today,
             sessionHistory: history
@@ -101,6 +103,7 @@ function completeSessionIfActive() {
             endTime: null,
             timerMode: "focus",
             focusSessions: newSessions,
+            totalFocusSessions: newTotalSessions,
             timeLeftSeconds: (res.customMinutes || 25) * 60,
             lastSessionDate: today,
             sessionHistory: history
