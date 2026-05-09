@@ -8,7 +8,9 @@ Focus Garden is a minimalist productivity extension for Chrome that combines the
 - **Break Mode** — Automatically starts a configurable break after each focus session
 - **Persistent Timer** — Timer keeps running accurately even when the popup is closed
 - **Extension Badge** — Green ✓ when focus is done, blue ✓ when break is done; clears when you open the popup
-- **Virtual Garden** — Visual progress indicator that grows with your sessions (🏜️ → 🌱 → 🌳)
+- **Desktop Notifications** — Sends a browser notification when a focus session completes
+- **Virtual Garden** — Visual progress indicator that grows from seedling to sprout to tree as total sessions increase
+- **Plant Customization** — Name your plant and choose a plant style from the settings panel
 - **Session History** — Bar chart of the last 7 days with Today / This Week / All Time totals
 - **Daily Reset** — Session counter automatically resets at midnight; past days are saved to history
 - **Onboarding** — Short welcome screen on first install explaining core features
@@ -24,6 +26,8 @@ Focus Garden is a minimalist productivity extension for Chrome that combines the
 - **Extension:** Chrome Manifest V3 with background service worker
 
 ## 🚀 Installation
+
+Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/focus-garden/hclkbohhcdajaninpcmpcmgekpbafami), or load the extension locally:
 
 1. Clone the repo and install dependencies:
    ```bash
