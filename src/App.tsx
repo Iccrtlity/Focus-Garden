@@ -3,6 +3,7 @@ import { Play, RotateCcw, Leaf, Pause, Settings, Check, BarChart2 } from "lucide
 
 type TimerMode = "focus" | "break";
 type View = "timer" | "settings" | "history" | "onboarding";
+type PlantSpecies = "herb" | "succulent" | "flower";
 
 interface HistoryEntry {
   date: string;
@@ -13,23 +14,25 @@ function getToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function getPlantImagePath(totalSessions: number, chromeApi?: any): string {
+function getPlantImagePath(totalSessions: number, species: PlantSpecies = "herb", chromeApi?: any): string {
   let imageName = "seedling.png";
 
   if (totalSessions >= 10) {
-    imageName = "tree.png";
+    imageName = `tree-${species}.png`;
   } else if (totalSessions >= 5) {
-    imageName = "sprout.png";
+    imageName = `sprout-${species}.png`;
+  } else {
+    imageName = `seedling-${species}.png`;
   }
 
   return chromeApi?.runtime?.getURL?.(imageName) ?? `./${imageName}`;
 }
 
-function updatePlantDisplay(totalSessions: number, chromeApi?: any): void {
+function updatePlantDisplay(totalSessions: number, species: PlantSpecies = "herb", chromeApi?: any): void {
   const plantDisplay = document.getElementById("plant-display") as HTMLImageElement | null;
   if (!plantDisplay) return;
 
-  plantDisplay.src = getPlantImagePath(totalSessions, chromeApi);
+  plantDisplay.src = getPlantImagePath(totalSessions, species, chromeApi);
   plantDisplay.alt = `Plant growth level for ${totalSessions} completed sessions`;
 }
 
@@ -46,6 +49,8 @@ function App() {
   const [totalSeconds, setTotalSeconds] = useState(25 * 60);
   const [sessionHistory, setSessionHistory] = useState<HistoryEntry[]>([]);
   const [storageLoaded, setStorageLoaded] = useState(false);
+  const [plantName, setPlantName] = useState("My Plant");
+  const [plantSpecies, setPlantSpecies] = useState<PlantSpecies>("herb");
 
   const timeLeftRef = useRef(timeLeft);
   const isActiveRef = useRef(isActive);
@@ -60,14 +65,14 @@ function App() {
   }, []);
 
   useEffect(() => {
-    updatePlantDisplay(totalFocusSessions, chrome);
-  }, [chrome, totalFocusSessions]);
+    updatePlantDisplay(totalFocusSessions, plantSpecies, chrome);
+  }, [chrome, totalFocusSessions, plantSpecies]);
 
   useEffect(() => {
     chrome.storage.local.get(
       ["endTime", "isActive", "focusSessions", "totalFocusSessions", "customMinutes", "breakMinutes",
         "breakModeEnabled", "timerMode", "timeLeftSeconds", "sessionHistory",
-        "lastSessionDate", "onboardingDone"],
+        "lastSessionDate", "onboardingDone", "plantName", "plantSpecies"],
       (res: any) => {
         // Daily reset
         const today = getToday();
@@ -86,6 +91,8 @@ function App() {
         setSessions(currentSessions);
   setTotalFocusSessions(res.totalFocusSessions || 0);
         setSessionHistory(history);
+        setPlantName(res.plantName || "My Plant");
+        setPlantSpecies(res.plantSpecies || "herb");
 
         const nextFocus = res.customMinutes || 25;
         const nextBreak = res.breakMinutes || 5;
@@ -227,6 +234,8 @@ function App() {
           setSessions(newSessions);
           setTotalFocusSessions(newTotalSessions);
           setSessionHistory(history);
+        setPlantName(res.plantName || "My Plant");
+        setPlantSpecies(res.plantSpecies || "herb");
           chrome.storage.local.set({ isActive: false, endTime: null, focusSessions: newSessions, totalFocusSessions: newTotalSessions, lastSessionDate: today, sessionHistory: history });
           chrome.action.setBadgeText({ text: "\u2713" });
           chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
@@ -265,7 +274,7 @@ function App() {
   const saveSettings = () => {
     completingRef.current = false;
     chrome.storage.local.set({
-      customMinutes, breakMinutes, breakModeEnabled,
+      customMinutes, breakMinutes, breakModeEnabled, plantName, plantSpecies,
       isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60,
     });
     chrome.runtime.sendMessage({ type: "stopTimer" }, () => { void chrome.runtime.lastError; });
@@ -371,6 +380,13 @@ function App() {
                 <span className={`block w-6 h-6 rounded-full bg-white transition-transform ${breakModeEnabled ? "translate-x-7" : "translate-x-1"}`} />
               </button>
             </label>
+            <div className="border-t border-slate-800 pt-4">
+              <h2 className="text-center text-xs text-slate-500 uppercase tracking-widest mb-4">Plant Customization</h2>
+              <input type="text" value={plantName} onChange={(e) => setPlantName(e.target.value || 'My Plant')} placeholder="Name your plant..." maxLength={20} className="w-full bg-slate-900 border border-slate-800 p-3 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-green-500 mb-4" />
+              <div className="flex gap-2">
+                {(['herb', 'succulent', 'flower'] as const).map(s => (<button key={s} onClick={() => setPlantSpecies(s)} className={`flex-1 py-2 px-2 text-xs font-semibold rounded-lg ${plantSpecies === s ? 'bg-green-500 text-slate-950' : 'bg-slate-900 border border-slate-800 text-slate-300'}`}>{s === 'herb' ? '🌿' : s === 'succulent' ? '🌵' : '🌸'} {s}</button>))}
+              </div>
+            </div>
             <button onClick={saveSettings} className="w-full bg-green-500 text-slate-950 font-bold p-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-transform"><Check size={20} /> Save Settings</button>
           </div>
         )}
@@ -468,10 +484,11 @@ function App() {
             <div className="w-full bg-slate-900/50 border border-slate-800 rounded-[2rem] p-6 text-center relative">
               <img
                 id="plant-display"
-                src={getPlantImagePath(totalFocusSessions, chrome)}
+                src={getPlantImagePath(totalFocusSessions, plantSpecies, chrome)}
                 alt={`Plant growth level for ${totalFocusSessions} completed sessions`}
                 className="mx-auto mb-3 h-24 w-24 object-contain drop-shadow-md"
               />
+              <p className="text-green-400 font-semibold">{plantName}</p>
               <p className="text-white font-medium">{sessions} Sessions today</p>
               <p className="mt-1 text-xs text-slate-400">{totalFocusSessions} total completed sessions</p>
             </div>
