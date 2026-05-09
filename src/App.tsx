@@ -465,31 +465,31 @@ function App() {
               </button>
               <div className="w-12"></div>
             </div>
-            <div className="w-full bg-slate-900/50 border border-slate-800 rounded-[2rem] p-6 text-center relative">
+            <div className="w-full border border-slate-800 rounded-[2rem] p-6 text-center relative" style={{ backgroundColor: 'transparent' }}>
               {/* Watering Can */}
               <div className={`watering-can ${isActive ? "is-watering" : ""}`}>
-                <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
-                  {/* Can body - minimalist outline */}
-                  <path d="M 12 22 L 12 10 Q 12 6 16 6 L 28 6 Q 32 6 32 10 L 32 20" stroke="#cbd5e1" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  {/* Can spout - angled */}
-                  <path d="M 32 18 L 42 12" stroke="#cbd5e1" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                  {/* Can body */}
+                  <path d="M 8 20 L 8 10 Q 8 6 12 6 L 24 6 Q 28 6 28 10 L 28 18" stroke="#ffffff" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  {/* Spout */}
+                  <path d="M 28 16 L 36 10" stroke="#ffffff" strokeWidth="1.2" fill="none" strokeLinecap="round" />
                   {/* Handle */}
-                  <path d="M 28 10 Q 35 8 36 16" stroke="#cbd5e1" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+                  <path d="M 22 8 Q 32 6 32 14" stroke="#ffffff" strokeWidth="1" fill="none" strokeLinecap="round" />
                 </svg>
               </div>
 
-              {/* Water Droplet Stream */}
-              <div className={`water-stream ${isActive ? "is-pouring" : ""}`}>
-                <div className="droplet droplet-1"></div>
-                <div className="droplet droplet-2"></div>
-                <div className="droplet droplet-3"></div>
+              {/* Water Drops Container */}
+              <div className={`water-drops ${isActive ? "is-watering" : ""}`}>
+                <div className="water-drop drop-1"></div>
+                <div className="water-drop drop-2"></div>
+                <div className="water-drop drop-3"></div>
               </div>
 
               <img
                 id="plant-display"
                 src={getPlantImagePath(totalFocusSessions, chrome)}
                 alt={`Plant growth level for ${totalFocusSessions} completed sessions`}
-                className="mx-auto mb-3 h-24 w-24 object-contain drop-shadow-md relative z-10"
+                className="mx-auto mb-3 h-24 w-24 object-contain drop-shadow-md relative z-20"
               />
               <p className="text-white font-medium">{sessions} Sessions today</p>
               <p className="mt-1 text-xs text-slate-400">{totalFocusSessions} total completed sessions</p>
