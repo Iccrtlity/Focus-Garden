@@ -182,3 +182,88 @@
     border-right-color: var(--border);
   }
 }
+
+/* Watering Animation */
+@keyframes gentle-pour {
+  0%, 100% {
+    transform: rotateZ(-8deg);
+  }
+  50% {
+    transform: rotateZ(8deg);
+  }
+}
+
+@keyframes water-drop {
+  0% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(60px);
+    opacity: 0;
+  }
+}
+
+.watering-can {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 40px;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: center center;
+}
+
+.watering-can.is-watering {
+  opacity: 1;
+  animation: gentle-pour 1s ease-in-out infinite;
+}
+
+.watering-can svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.watering-drops {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 80px;
+  pointer-events: none;
+}
+
+.watering-drops.is-watering .water-drop {
+  animation: water-drop 0.8s ease-in infinite;
+}
+
+.water-drop {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background-color: #0ea5e9;
+  border-radius: 50%;
+  left: 50%;
+  top: 0;
+  margin-left: -2px;
+}
+
+.water-drop:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.water-drop:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.water-drop:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.water-drop:nth-child(4) {
+  animation-delay: 0.6s;
+}

@@ -465,7 +465,28 @@ function App() {
               </button>
               <div className="w-12"></div>
             </div>
-            <div className="w-full bg-slate-900/50 border border-slate-800 rounded-[2rem] p-6 text-center">
+            <div className="w-full bg-slate-900/50 border border-slate-800 rounded-[2rem] p-6 text-center relative">
+              {/* Watering Can */}
+              <div className={`watering-can ${isActive ? "is-watering" : ""}`}>
+                <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                  {/* Spout */}
+                  <path d="M 28 15 Q 32 12 35 10" stroke="#94a3b8" strokeWidth="3" fill="none" strokeLinecap="round" />
+                  {/* Can body */}
+                  <rect x="8" y="18" width="18" height="14" rx="2" fill="#64748b" stroke="#94a3b8" strokeWidth="2" />
+                  {/* Can opening */}
+                  <rect x="10" y="16" width="14" height="3" fill="#475569" stroke="#64748b" strokeWidth="1" />
+                  {/* Handle */}
+                  <path d="M 24 20 Q 28 18 28 24" stroke="#94a3b8" strokeWidth="2" fill="none" strokeLinecap="round" />
+                </svg>
+              </div>
+              {/* Water Drops Particles */}
+              <div className={`watering-drops ${isActive ? "is-watering" : ""}`}>
+                <div className="water-drop"></div>
+                <div className="water-drop"></div>
+                <div className="water-drop"></div>
+                <div className="water-drop"></div>
+              </div>
+
               <img
                 id="plant-display"
                 src={getPlantImagePath(totalFocusSessions, chrome)}
