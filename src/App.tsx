@@ -80,6 +80,11 @@ function getStoredPlantSpecies(value: string | undefined): PlantSpecies {
   return "herb";
 }
 
+function getSavedPlantName(value: string | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : "My Plant";
+}
+
 function getPlantImagePath(totalSessions: number, extensionApi?: ExtensionApi): string {
   let imageName: string;
   if (totalSessions >= 10) {
@@ -166,7 +171,7 @@ function App() {
         setSessions(currentSessions);
         setTotalFocusSessions(res.totalFocusSessions || 0);
         setSessionHistory(history);
-        setPlantName(res.plantName || "My Plant");
+        setPlantName(getSavedPlantName(res.plantName));
         setPlantSpecies(getStoredPlantSpecies(res.plantSpecies));
 
         const nextFocus = res.customMinutes || 25;
@@ -297,7 +302,7 @@ function App() {
             setSessions(newSessions);
             setTotalFocusSessions(newTotalSessions);
             setSessionHistory(history);
-            setPlantName(res.plantName || "My Plant");
+            setPlantName(getSavedPlantName(res.plantName));
             setPlantSpecies(getStoredPlantSpecies(res.plantSpecies));
             extensionApi.storage?.local.set({
               isActive: false,
@@ -363,9 +368,10 @@ function App() {
   };
 
   const saveSettings = () => {
+    const savedPlantName = getSavedPlantName(plantName);
     completingRef.current = false;
     extensionApi?.storage?.local.set({
-      customMinutes, breakMinutes, breakModeEnabled, plantName, plantSpecies,
+      customMinutes, breakMinutes, breakModeEnabled, plantName: savedPlantName, plantSpecies,
       isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60,
     });
     extensionApi?.runtime?.sendMessage({ type: "stopTimer" }, () => { void extensionApi.runtime?.lastError; });
@@ -373,6 +379,7 @@ function App() {
     setTimerMode("focus");
     setTotalSeconds(customMinutes * 60);
     setTimeLeft(customMinutes * 60);
+    setPlantName(savedPlantName);
     setView("timer");
   };
 
@@ -473,7 +480,7 @@ function App() {
             </label>
             <div className="border-t border-slate-800 pt-4">
               <h2 className="text-center text-xs text-slate-500 uppercase tracking-widest mb-4">Plant Customization</h2>
-              <input type="text" value={plantName} onChange={(e) => setPlantName(e.target.value || 'My Plant')} placeholder="Name your plant..." maxLength={20} className="w-full bg-slate-900 border border-slate-800 p-3 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-green-500 mb-4" />
+              <input type="text" value={plantName} onChange={(e) => setPlantName(e.target.value)} placeholder="Name your plant..." maxLength={20} className="w-full bg-slate-900 border border-slate-800 p-3 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-green-500 mb-4" />
               <div className="flex gap-2">
                 {(['herb', 'succulent', 'flower'] as const).map(s => (<button key={s} onClick={() => setPlantSpecies(s)} className={`flex-1 py-2 px-2 text-xs font-semibold rounded-lg ${plantSpecies === s ? 'bg-green-500 text-slate-950' : 'bg-slate-900 border border-slate-800 text-slate-300'}`}>{s === 'herb' ? '🌿' : s === 'succulent' ? '🌵' : '🌸'} {s}</button>))}
               </div>
