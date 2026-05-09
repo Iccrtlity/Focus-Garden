@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Play, RotateCcw, Leaf, Pause, Settings, Check, BarChart2 } from "lucide-react";
+import { Play, RotateCcw, Leaf, Pause, Settings, Check, BarChart2, Sprout, Shrub, Flower2 } from "lucide-react";
 
 type TimerMode = "focus" | "break";
 type View = "timer" | "settings" | "history" | "onboarding";
@@ -98,6 +98,12 @@ function getPlantImagePath(totalSessions: number, extensionApi?: ExtensionApi): 
   return extensionApi?.runtime?.getURL(imageName) ?? `./${imageName}`;
 }
 
+function PlantSpeciesIcon({ species }: { species: PlantSpecies }) {
+  if (species === "succulent") return <Shrub size={16} />;
+  if (species === "flower") return <Flower2 size={16} />;
+  return <Sprout size={16} />;
+}
+
 function updatePlantDisplay(totalSessions: number, species: PlantSpecies, extensionApi?: ExtensionApi): void {
   const plantDisplay = document.getElementById("plant-display") as HTMLImageElement | null;
   if (!plantDisplay) return;
@@ -124,6 +130,8 @@ function App() {
 
   const timeLeftRef = useRef(timeLeft);
   const isActiveRef = useRef(isActive);
+  const timerModeRef = useRef(timerMode);
+  const endTimeRef = useRef<number | null>(null);
   const completingRef = useRef(false);
 
   const extensionApi = useMemo(() => getExtensionApi(), []);
@@ -135,6 +143,10 @@ function App() {
   useEffect(() => {
     isActiveRef.current = isActive;
   }, [isActive]);
+
+  useEffect(() => {
+    timerModeRef.current = timerMode;
+  }, [timerMode]);
 
   useEffect(() => {
     extensionApi?.action?.setBadgeText({ text: "" });
@@ -191,16 +203,19 @@ function App() {
           const remaining = Math.max(0, Math.round((res.endTime - Date.now()) / 1000));
           if (remaining > 0) {
             const full = (nextMode === "focus" ? nextFocus : nextBreak) * 60;
+            endTimeRef.current = res.endTime;
             setTotalSeconds(full);
             setTimeLeft(remaining);
             setIsActive(true);
           } else {
             const full = (nextMode === "focus" ? nextFocus : nextBreak) * 60;
+            endTimeRef.current = null;
             setTotalSeconds(full);
             setIsActive(false);
             setTimeLeft(full);
           }
         } else {
+          endTimeRef.current = null;
           setIsActive(false);
           const stored = res.timeLeftSeconds;
           const full = (nextMode === "focus" ? nextFocus : nextBreak) * 60;
@@ -231,8 +246,23 @@ function App() {
           setBreakModeEnabled(res.breakModeEnabled ?? true);
           if (res.sessionHistory) setSessionHistory(res.sessionHistory);
 
+          const nextMode: TimerMode = res.timerMode || "focus";
+          if (res.isActive && res.endTime && nextMode !== timerModeRef.current) {
+            const remaining = Math.max(0, Math.round((res.endTime - Date.now()) / 1000));
+            if (remaining > 0) {
+              const full = (nextMode === "focus" ? (res.customMinutes || 25) : (res.breakMinutes || 5)) * 60;
+              endTimeRef.current = res.endTime;
+              setTimerMode(nextMode);
+              setCustomMinutes(res.customMinutes || 25);
+              setBreakMinutes(res.breakMinutes || 5);
+              setTotalSeconds(full);
+              setTimeLeft(remaining);
+              setIsActive(true);
+              return;
+            }
+          }
+
           if (!isActiveRef.current) {
-            const nextMode: TimerMode = res.timerMode || "focus";
             setTimerMode(nextMode);
             setCustomMinutes(res.customMinutes || 25);
             setBreakMinutes(res.breakMinutes || 5);
@@ -241,6 +271,7 @@ function App() {
               const remaining = Math.max(0, Math.round((res.endTime - Date.now()) / 1000));
               if (remaining > 0) {
                 const full = (nextMode === "focus" ? (res.customMinutes || 25) : (res.breakMinutes || 5)) * 60;
+                endTimeRef.current = res.endTime;
                 setTotalSeconds(full);
                 setTimeLeft(remaining);
                 setIsActive(true);
@@ -251,6 +282,7 @@ function App() {
             const nb = res.breakMinutes || 5;
             const nm: TimerMode = res.timerMode || "focus";
             const full = (nm === "focus" ? nf : nb) * 60;
+            endTimeRef.current = null;
             setTotalSeconds(full);
             // Use saved remaining time when paused, only reset to full on a fresh reset/complete
             setTimeLeft(res.timeLeftSeconds ?? full);
@@ -271,7 +303,11 @@ function App() {
       return;
     }
 
-    extensionApi.runtime.sendMessage({ type: "timerComplete" }, () => {
+    extensionApi.runtime.sendMessage({
+      type: "timerComplete",
+      expectedTimerMode: timerModeRef.current,
+      expectedEndTime: endTimeRef.current,
+    }, () => {
       completingRef.current = false;
       if (extensionApi.runtime?.lastError) {
         // Fallback when service worker is unreachable
@@ -345,12 +381,14 @@ function App() {
       const secondsToRun = timeLeft > 0 ? timeLeft : customMinutes * 60;
       const endTime = Date.now() + secondsToRun * 1000;
       if (timeLeft <= 0) setTotalSeconds(customMinutes * 60);
+      endTimeRef.current = endTime;
       extensionApi?.storage?.local.set({ isActive: true, endTime, timerMode, timeLeftSeconds: secondsToRun });
       extensionApi?.runtime?.sendMessage({ type: "startTimer", endTime }, () => {
         if (extensionApi.runtime?.lastError) extensionApi.action?.setBadgeText({ text: "" });
       });
       setIsActive(true);
     } else {
+      endTimeRef.current = null;
       extensionApi?.storage?.local.set({ isActive: false, endTime: null, timeLeftSeconds: timeLeftRef.current });
       extensionApi?.runtime?.sendMessage({ type: "stopTimer" }, () => { void extensionApi.runtime?.lastError; });
       setIsActive(false);
@@ -359,6 +397,7 @@ function App() {
 
   const resetTimer = () => {
     completingRef.current = false;
+    endTimeRef.current = null;
     extensionApi?.storage?.local.set({ isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60 });
     extensionApi?.runtime?.sendMessage({ type: "stopTimer" }, () => { void extensionApi.runtime?.lastError; });
     setIsActive(false);
@@ -370,6 +409,7 @@ function App() {
   const saveSettings = () => {
     const savedPlantName = getSavedPlantName(plantName);
     completingRef.current = false;
+    endTimeRef.current = null;
     extensionApi?.storage?.local.set({
       customMinutes, breakMinutes, breakModeEnabled, plantName: savedPlantName, plantSpecies,
       isActive: false, endTime: null, timerMode: "focus", timeLeftSeconds: customMinutes * 60,
@@ -482,7 +522,12 @@ function App() {
               <h2 className="text-center text-xs text-slate-500 uppercase tracking-widest mb-4">Plant Customization</h2>
               <input type="text" value={plantName} onChange={(e) => setPlantName(e.target.value)} placeholder="Name your plant..." maxLength={20} className="w-full bg-slate-900 border border-slate-800 p-3 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-green-500 mb-4" />
               <div className="flex gap-2">
-                {(['herb', 'succulent', 'flower'] as const).map(s => (<button key={s} onClick={() => setPlantSpecies(s)} className={`flex-1 py-2 px-2 text-xs font-semibold rounded-lg ${plantSpecies === s ? 'bg-green-500 text-slate-950' : 'bg-slate-900 border border-slate-800 text-slate-300'}`}>{s === 'herb' ? '🌿' : s === 'succulent' ? '🌵' : '🌸'} {s}</button>))}
+                {(['herb', 'succulent', 'flower'] as const).map(s => (
+                  <button key={s} onClick={() => setPlantSpecies(s)} className={`flex-1 py-2 px-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 ${plantSpecies === s ? 'bg-green-500 text-slate-950' : 'bg-slate-900 border border-slate-800 text-slate-300'}`}>
+                    <PlantSpeciesIcon species={s} />
+                    {s}
+                  </button>
+                ))}
               </div>
             </div>
             <button onClick={saveSettings} className="w-full bg-green-500 text-slate-950 font-bold p-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-transform"><Check size={20} /> Save Settings</button>

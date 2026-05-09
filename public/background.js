@@ -61,13 +61,15 @@ function recoverAlarmFromStorage() {
   });
 }
 
-function completeSessionIfActive() {
+function completeSessionIfActive(expected = {}) {
   chrome.storage.local.get(
-    ["isActive", "focusSessions", "totalFocusSessions", "timerMode", "breakModeEnabled", "breakMinutes", "customMinutes", "lastSessionDate", "sessionHistory"],
+    ["isActive", "endTime", "focusSessions", "totalFocusSessions", "timerMode", "breakModeEnabled", "breakMinutes", "customMinutes", "lastSessionDate", "sessionHistory"],
     (res) => {
       if (!res.isActive) return;
 
       const timerMode = res.timerMode || "focus";
+      if (expected.timerMode && timerMode !== expected.timerMode) return;
+      if (expected.endTime && (!res.endTime || Math.abs(res.endTime - expected.endTime) > 1000)) return;
 
       if (timerMode === "focus") {
         // Daily reset check
@@ -148,7 +150,10 @@ chrome.runtime.onMessage.addListener((message) => {
 
   if (message.type === "timerComplete") {
     chrome.alarms.clear(TIMER_ALARM);
-    completeSessionIfActive();
+    completeSessionIfActive({
+      timerMode: message.expectedTimerMode,
+      endTime: message.expectedEndTime
+    });
     return;
   }
 
@@ -159,7 +164,7 @@ chrome.runtime.onMessage.addListener((message) => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TIMER_ALARM) {
-    completeSessionIfActive();
+    completeSessionIfActive({ endTime: alarm.scheduledTime });
   }
 });
 
